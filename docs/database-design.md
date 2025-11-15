@@ -14,16 +14,37 @@ Supabase PostgreSQL + pgvector を使用
 │─────────────────│
 │ id (uuid) PK    │
 │ email           │
-│ role            │◄──────────┐
-│ created_at      │           │
-└────────┬────────┘           │
-         │                    │
-         │ 1:N                │
-         │                    │
-┌────────▼────────────────────┴───┐
+│ role            │ ← 'admin', 'operator', 'customer'
+│ created_at      │
+└────────┬────────┘
+         │
+         │ 1:1 (role='operator'の場合)
+         │
+┌────────▼──────────────────┐
+│      operators            │ ← ⭐ NEW オペレーター企業テーブル
+│───────────────────────────│
+│ id (uuid) PK              │
+│ user_id (uuid) FK         │ ← auth.users.id (role='operator')
+│ company_name              │
+│ company_address           │
+│ phone                     │
+│ email                     │
+│ subscription_status       │ ← 'active', 'suspended', 'cancelled'
+│ subscription_plan         │ ← 'basic', 'standard', 'premium'
+│ contract_start_date       │
+│ contract_end_date         │
+│ is_active                 │
+│ created_at                │
+│ updated_at                │
+└────────┬──────────────────┘
+         │
+         │ 1:N
+         │
+┌────────▼────────────────────────┐
 │      properties                 │
 │─────────────────────────────────│
 │ id (uuid) PK                    │
+│ operator_id (uuid) FK           │ ← ⭐ NEW どのオペレーターの物件か
 │ title                           │
 │ address                         │
 │ area                            │
@@ -36,105 +57,181 @@ Supabase PostgreSQL + pgvector を使用
 │ description                     │
 │ embedding (vector)              │ ← pgvector
 │ is_public                       │
-│ created_by (uuid) FK            │──┐
-│ created_at                      │  │
-│ updated_at                      │  │
-└────────┬────────────────────────┘  │
-         │                           │
-         │ 1:N                       │
-         │                           │
-┌────────▼──────────────┐            │
-│  property_images      │            │
-│───────────────────────│            │
-│ id (uuid) PK          │            │
-│ property_id (uuid) FK │            │
-│ storage_path          │            │
-│ display_order         │            │
-│ created_at            │            │
-└───────────────────────┘            │
-                                     │
-┌────────────────────────────────────┘
-│
-│        ┌──────────────────────────┐
-│        │ property_import_logs     │
-│        │──────────────────────────│
-│        │ id (uuid) PK             │
-│        │ property_id (uuid) FK    │
-│        │ source_url               │
-│        │ html_snapshot_path       │
-│        │ imported_by (uuid) FK    │
-│        │ imported_at              │
-│        └──────────────────────────┘
-│
-│
-│
-│       ┌──────────────────┐
-│       │   customers      │
-│       │──────────────────│
-│       │ id (uuid) PK     │
-│       │ user_id (uuid) FK│
-│       │ name             │
-│       │ phone            │
-│       │ email            │
-│       │ created_at       │
-│       └────────┬─────────┘
-│                │
-│                │ 1:N
-│                │
-│       ┌────────▼──────────────┐
-│       │ customer_preferences  │
-│       │───────────────────────│
-│       │ id (uuid) PK          │
-│       │ customer_id (uuid) FK │
-│       │ area                  │
-│       │ rent_min              │
-│       │ rent_max              │
-│       │ layout                │
-│       │ building_type         │
-│       │ updated_at            │
-│       └───────────────────────┘
-│
-│
-│       ┌──────────────────────┐
-│       │   conversations      │
-│       │──────────────────────│
-│       │ id (uuid) PK         │
-│       │ customer_id (uuid) FK│
-│       │ started_at           │
-│       │ ended_at             │
-│       └────────┬─────────────┘
-│                │
-│                │ 1:N
-│                │
-│       ┌────────▼─────────┐
-│       │    messages      │
-│       │──────────────────│
-│       │ id (uuid) PK     │
-│       │ conversation_id  │
-│       │ role             │
-│       │ content          │
-│       │ emotion          │
-│       │ timestamp        │
-│       └──────────────────┘
-│
-│
-│       ┌──────────────────┐
-│       │   inquiries      │
-│       │──────────────────│
-│       │ id (uuid) PK     │
-│       │ customer_id (FK) │
-│       │ property_id (FK) │
-│       │ status           │
-│       │ message          │
-│       │ created_at       │
-│       └──────────────────┘
+│ created_by (uuid) FK            │ ← auth.users.id
+│ created_at                      │
+│ updated_at                      │
+└────────┬────────────────────────┘
+         │
+         │ 1:N
+         │
+┌────────▼──────────────┐
+│  property_images      │
+│───────────────────────│
+│ id (uuid) PK          │
+│ property_id (uuid) FK │
+│ storage_path          │
+│ display_order         │
+│ created_at            │
+└───────────────────────┘
+
+┌──────────────────────────┐
+│ property_import_logs     │
+│──────────────────────────│
+│ id (uuid) PK             │
+│ property_id (uuid) FK    │
+│ operator_id (uuid) FK    │ ← ⭐ NEW
+│ source_url               │
+│ html_snapshot_path       │
+│ imported_by (uuid) FK    │
+│ imported_at              │
+└──────────────────────────┘
+
+┌──────────────────┐
+│   customers      │
+│──────────────────│
+│ id (uuid) PK     │
+│ user_id (uuid) FK│ ← auth.users.id
+│ operator_id (FK) │ ← ⭐ NEW どのオペレーターの顧客か
+│ name             │
+│ phone            │
+│ email            │
+│ created_at       │
+└────────┬─────────┘
+         │
+         │ 1:N
+         │
+┌────────▼──────────────┐
+│ customer_preferences  │
+│───────────────────────│
+│ id (uuid) PK          │
+│ customer_id (uuid) FK │
+│ area                  │
+│ rent_min              │
+│ rent_max              │
+│ layout                │
+│ building_type         │
+│ updated_at            │
+└───────────────────────┘
+
+┌──────────────────────┐
+│   conversations      │
+│──────────────────────│
+│ id (uuid) PK         │
+│ customer_id (uuid) FK│
+│ operator_id (uuid) FK│ ← ⭐ NEW
+│ started_at           │
+│ ended_at             │
+└────────┬─────────────┘
+         │
+         │ 1:N
+         │
+┌────────▼─────────┐
+│    messages      │
+│──────────────────│
+│ id (uuid) PK     │
+│ conversation_id  │
+│ role             │
+│ content          │
+│ emotion          │
+│ timestamp        │
+└──────────────────┘
+
+┌──────────────────┐
+│   inquiries      │
+│──────────────────│
+│ id (uuid) PK     │
+│ customer_id (FK) │
+│ property_id (FK) │
+│ operator_id (FK) │ ← ⭐ NEW
+│ status           │
+│ message          │
+│ created_at       │
+└──────────────────┘
+
+┌──────────────────┐
+│   viewings       │
+│──────────────────│
+│ id (uuid) PK     │
+│ customer_id (FK) │
+│ property_id (FK) │
+│ operator_id (FK) │ ← ⭐ NEW
+│ viewing_date     │
+│ status           │
+│ created_at       │
+└──────────────────┘
 ```
 
 ---
 
 ## テーブル定義
 
-### 1. auth.users（Supabase管理テーブル）
+### 1. operators（オペレーター企業マスタ） ⭐ NEW
+
+```sql
+CREATE TABLE operators (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- ユーザーアカウント紐付け
+  user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+
+  -- 企業情報
+  company_name VARCHAR(255) NOT NULL,
+  company_address TEXT,
+  phone VARCHAR(20),
+  email VARCHAR(255) NOT NULL,
+
+  -- サブスクリプション情報
+  subscription_status VARCHAR(20) DEFAULT 'active' CHECK (
+    subscription_status IN ('active', 'suspended', 'cancelled', 'trial')
+  ),
+  subscription_plan VARCHAR(20) DEFAULT 'basic' CHECK (
+    subscription_plan IN ('basic', 'standard', 'premium')
+  ),
+
+  -- 契約情報
+  contract_start_date DATE NOT NULL,
+  contract_end_date DATE,
+
+  -- ステータス
+  is_active BOOLEAN DEFAULT true,
+
+  -- メタ情報
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- インデックス作成
+CREATE INDEX idx_operators_user_id ON operators(user_id);
+CREATE INDEX idx_operators_subscription_status ON operators(subscription_status);
+CREATE INDEX idx_operators_is_active ON operators(is_active);
+
+-- 更新日時の自動更新
+CREATE TRIGGER update_operators_updated_at
+BEFORE UPDATE ON operators
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+```
+
+**カラム説明**:
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | uuid | PK | オペレーターID |
+| user_id | uuid | FK, UNIQUE | auth.usersへの参照 |
+| company_name | varchar(255) | NOT NULL | 企業名 |
+| company_address | text | | 企業住所 |
+| phone | varchar(20) | | 電話番号 |
+| email | varchar(255) | NOT NULL | 企業メールアドレス |
+| subscription_status | varchar(20) | NOT NULL | サブスク状態 |
+| subscription_plan | varchar(20) | NOT NULL | プラン種別 |
+| contract_start_date | date | NOT NULL | 契約開始日 |
+| contract_end_date | date | | 契約終了日 |
+| is_active | boolean | DEFAULT true | 有効フラグ |
+| created_at | timestamptz | DEFAULT NOW() | 作成日時 |
+| updated_at | timestamptz | DEFAULT NOW() | 更新日時 |
+
+---
+
+### 2. auth.users（Supabase管理テーブル）
 
 ```sql
 -- Supabaseが自動生成・管理
@@ -159,11 +256,14 @@ CHECK (role IN ('customer', 'operator', 'admin'));
 
 ---
 
-### 2. properties（物件マスタ）
+### 3. properties（物件マスタ）
 
 ```sql
 CREATE TABLE properties (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- オペレーター紐付け ⭐ NEW
+  operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE,
 
   -- 基本情報
   title VARCHAR(255) NOT NULL,
@@ -210,6 +310,7 @@ CREATE TABLE properties (
 );
 
 -- インデックス作成
+CREATE INDEX idx_properties_operator_id ON properties(operator_id);
 CREATE INDEX idx_properties_area ON properties(area);
 CREATE INDEX idx_properties_rent ON properties(rent);
 CREATE INDEX idx_properties_layout ON properties(layout);
@@ -217,7 +318,7 @@ CREATE INDEX idx_properties_transaction_type ON properties(transaction_type);
 
 -- 複合インデックス
 CREATE INDEX idx_properties_search
-ON properties(area, rent, layout)
+ON properties(area, rent, layout, operator_id)
 WHERE is_public = true;
 
 -- ベクトル検索用インデックス（pgvector）
@@ -242,6 +343,7 @@ EXECUTE FUNCTION update_updated_at_column();
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | uuid | PK | 物件ID |
+| operator_id | uuid | FK, NOT NULL | オペレーターID（どの不動産会社の物件か） |
 | title | varchar(255) | NOT NULL | 物件タイトル |
 | address | text | NOT NULL | 住所 |
 | area | varchar(100) | NOT NULL | エリア（文京区等） |
@@ -256,7 +358,7 @@ EXECUTE FUNCTION update_updated_at_column();
 | description | text | | 物件説明 |
 | embedding | vector(1536) | | ベクトル（セマンティック検索用） |
 | is_public | boolean | DEFAULT true | 公開フラグ |
-| created_by | uuid | FK | 登録者 |
+| created_by | uuid | FK | 登録者（auth.users.id） |
 | created_at | timestamptz | DEFAULT NOW() | 作成日時 |
 | updated_at | timestamptz | DEFAULT NOW() | 更新日時 |
 
@@ -285,6 +387,7 @@ CREATE INDEX idx_property_images_display_order ON property_images(property_id, d
 CREATE TABLE property_import_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   property_id UUID REFERENCES properties(id) ON DELETE SET NULL,
+  operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE, -- ⭐ NEW
   source_url TEXT NOT NULL, -- 元のURL（アットホーム等）
   html_snapshot_path TEXT, -- Supabase Storageに保存したHTMLパス
   imported_by UUID NOT NULL REFERENCES auth.users(id),
@@ -296,6 +399,7 @@ CREATE TABLE property_import_logs (
   error_message TEXT
 );
 
+CREATE INDEX idx_import_logs_operator_id ON property_import_logs(operator_id);
 CREATE INDEX idx_import_logs_imported_by ON property_import_logs(imported_by);
 CREATE INDEX idx_import_logs_imported_at ON property_import_logs(imported_at DESC);
 ```
@@ -310,6 +414,7 @@ CREATE INDEX idx_import_logs_imported_at ON property_import_logs(imported_at DES
 CREATE TABLE customers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+  operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE, -- ⭐ NEW どのオペレーターの顧客か
   name VARCHAR(100),
   phone VARCHAR(20),
   email VARCHAR(255),
@@ -317,6 +422,7 @@ CREATE TABLE customers (
 );
 
 CREATE INDEX idx_customers_user_id ON customers(user_id);
+CREATE INDEX idx_customers_operator_id ON customers(operator_id);
 ```
 
 ---
@@ -354,6 +460,7 @@ CREATE INDEX idx_customer_preferences_customer_id ON customer_preferences(custom
 CREATE TABLE conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+  operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE, -- ⭐ NEW
   started_at TIMESTAMPTZ DEFAULT NOW(),
   ended_at TIMESTAMPTZ,
 
@@ -363,6 +470,7 @@ CREATE TABLE conversations (
 );
 
 CREATE INDEX idx_conversations_customer_id ON conversations(customer_id);
+CREATE INDEX idx_conversations_operator_id ON conversations(operator_id);
 CREATE INDEX idx_conversations_started_at ON conversations(started_at DESC);
 ```
 
@@ -397,6 +505,7 @@ CREATE TABLE inquiries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
   property_id UUID REFERENCES properties(id) ON DELETE SET NULL,
+  operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE, -- ⭐ NEW
 
   status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled')),
 
@@ -408,6 +517,7 @@ CREATE TABLE inquiries (
 );
 
 CREATE INDEX idx_inquiries_customer_id ON inquiries(customer_id);
+CREATE INDEX idx_inquiries_operator_id ON inquiries(operator_id);
 CREATE INDEX idx_inquiries_status ON inquiries(status);
 CREATE INDEX idx_inquiries_created_at ON inquiries(created_at DESC);
 ```
@@ -421,6 +531,7 @@ CREATE TABLE viewings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
   property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+  operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE, -- ⭐ NEW
 
   -- 予約日時
   viewing_date TIMESTAMPTZ NOT NULL,
@@ -445,6 +556,7 @@ CREATE TABLE viewings (
 
 CREATE INDEX idx_viewings_customer_id ON viewings(customer_id);
 CREATE INDEX idx_viewings_property_id ON viewings(property_id);
+CREATE INDEX idx_viewings_operator_id ON viewings(operator_id);
 CREATE INDEX idx_viewings_viewing_date ON viewings(viewing_date);
 CREATE INDEX idx_viewings_status ON viewings(status);
 CREATE INDEX idx_viewings_assigned_to ON viewings(assigned_to);
@@ -475,6 +587,7 @@ CREATE TABLE email_logs (
   template_name VARCHAR(100), -- 使用したテンプレート名
 
   -- 関連情報
+  operator_id UUID REFERENCES operators(id) ON DELETE CASCADE, -- ⭐ NEW
   customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
   property_id UUID REFERENCES properties(id) ON DELETE SET NULL,
   viewing_id UUID REFERENCES viewings(id) ON DELETE SET NULL,
@@ -504,6 +617,7 @@ CREATE TABLE email_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX idx_email_logs_operator_id ON email_logs(operator_id);
 CREATE INDEX idx_email_logs_to_email ON email_logs(to_email);
 CREATE INDEX idx_email_logs_customer_id ON email_logs(customer_id);
 CREATE INDEX idx_email_logs_email_type ON email_logs(email_type);
@@ -516,39 +630,68 @@ CREATE INDEX idx_email_logs_created_at ON email_logs(created_at DESC);
 
 ## Row Level Security（RLS）設定
 
+### operators テーブル ⭐ NEW
+
+```sql
+-- RLS有効化
+ALTER TABLE operators ENABLE ROW LEVEL SECURITY;
+
+-- オペレーター：自分の企業情報のみ閲覧・更新
+CREATE POLICY "operator_own_data"
+ON operators FOR ALL
+TO authenticated
+USING (
+  user_id = auth.uid()
+  AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'operator'
+);
+
+-- 管理者：すべてのオペレーター情報を閲覧・管理
+CREATE POLICY "admin_all_operators"
+ON operators FOR ALL
+TO authenticated
+USING (
+  (SELECT role FROM auth.users WHERE id = auth.uid()) = 'admin'
+);
+```
+
+---
+
 ### properties テーブル
 
 ```sql
 -- RLS有効化
 ALTER TABLE properties ENABLE ROW LEVEL SECURITY;
 
--- 顧客：公開物件のみ閲覧
-CREATE POLICY "customer_view_public_properties"
+-- 顧客：自分が所属するオペレーターの公開物件のみ閲覧
+CREATE POLICY "customer_view_own_operator_properties"
 ON properties FOR SELECT
 TO authenticated
 USING (
   is_public = true
+  AND operator_id IN (
+    SELECT operator_id FROM customers WHERE user_id = auth.uid()
+  )
   AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'customer'
 );
 
--- オペレーター：自分が登録した物件の更新
-CREATE POLICY "operator_update_own_properties"
-ON properties FOR UPDATE
+-- オペレーター：自社の物件を閲覧・更新
+CREATE POLICY "operator_manage_own_properties"
+ON properties FOR ALL
 TO authenticated
 USING (
-  created_by = auth.uid()
+  operator_id IN (
+    SELECT id FROM operators WHERE user_id = auth.uid()
+  )
+  AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'operator'
+)
+WITH CHECK (
+  operator_id IN (
+    SELECT id FROM operators WHERE user_id = auth.uid()
+  )
   AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'operator'
 );
 
--- オペレーター：物件の新規登録
-CREATE POLICY "operator_insert_properties"
-ON properties FOR INSERT
-TO authenticated
-WITH CHECK (
-  (SELECT role FROM auth.users WHERE id = auth.uid()) IN ('operator', 'admin')
-);
-
--- 管理者：すべての操作が可能
+-- 管理者：すべての物件を閲覧・管理
 CREATE POLICY "admin_all_properties"
 ON properties FOR ALL
 TO authenticated
@@ -562,12 +705,14 @@ USING (
 ```sql
 ALTER TABLE property_import_logs ENABLE ROW LEVEL SECURITY;
 
--- オペレーター：自分の取り込みログのみ閲覧
+-- オペレーター：自社の取り込みログのみ閲覧
 CREATE POLICY "operator_view_own_logs"
 ON property_import_logs FOR SELECT
 TO authenticated
 USING (
-  imported_by = auth.uid()
+  operator_id IN (
+    SELECT id FROM operators WHERE user_id = auth.uid()
+  )
   AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'operator'
 );
 
@@ -591,11 +736,23 @@ ON customers FOR ALL
 TO authenticated
 USING (
   user_id = auth.uid()
+  AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'customer'
 );
 
--- 管理者：すべて閲覧可能
-CREATE POLICY "admin_view_all_customers"
-ON customers FOR SELECT
+-- オペレーター：自社の顧客情報のみ閲覧・管理
+CREATE POLICY "operator_view_own_customers"
+ON customers FOR ALL
+TO authenticated
+USING (
+  operator_id IN (
+    SELECT id FROM operators WHERE user_id = auth.uid()
+  )
+  AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'operator'
+);
+
+-- 管理者：すべて閲覧・管理可能
+CREATE POLICY "admin_all_customers"
+ON customers FOR ALL
 TO authenticated
 USING (
   (SELECT role FROM auth.users WHERE id = auth.uid()) = 'admin'
@@ -616,6 +773,18 @@ USING (
   customer_id IN (
     SELECT id FROM customers WHERE user_id = auth.uid()
   )
+  AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'customer'
+);
+
+-- オペレーター：自社の顧客の会話のみ閲覧
+CREATE POLICY "operator_view_own_conversations"
+ON conversations FOR SELECT
+TO authenticated
+USING (
+  operator_id IN (
+    SELECT id FROM operators WHERE user_id = auth.uid()
+  )
+  AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'operator'
 );
 
 -- 顧客：自分の会話メッセージのみ閲覧
@@ -628,11 +797,33 @@ USING (
     JOIN customers cu ON c.customer_id = cu.id
     WHERE cu.user_id = auth.uid()
   )
+  AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'customer'
+);
+
+-- オペレーター：自社の顧客の会話メッセージのみ閲覧
+CREATE POLICY "operator_view_own_messages"
+ON messages FOR SELECT
+TO authenticated
+USING (
+  conversation_id IN (
+    SELECT c.id FROM conversations c
+    WHERE c.operator_id IN (
+      SELECT id FROM operators WHERE user_id = auth.uid()
+    )
+  )
+  AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'operator'
 );
 
 -- 管理者：すべて閲覧可能
 CREATE POLICY "admin_view_all_conversations"
 ON conversations FOR SELECT
+TO authenticated
+USING (
+  (SELECT role FROM auth.users WHERE id = auth.uid()) = 'admin'
+);
+
+CREATE POLICY "admin_view_all_messages"
+ON messages FOR SELECT
 TO authenticated
 USING (
   (SELECT role FROM auth.users WHERE id = auth.uid()) = 'admin'

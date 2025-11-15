@@ -479,14 +479,20 @@ app/
 │   └── inquiries/
 │       └── page.tsx
 │
-├── (admin)/                      # 管理者グループ
+├── (admin)/                      # 管理者グループ（gyam様専用）
 │   ├── layout.tsx
 │   ├── dashboard/
-│   │   └── page.tsx
+│   │   └── page.tsx              # システム全体のダッシュボード
+│   ├── operators/                # ⭐ NEW オペレーター（不動産会社）管理
+│   │   ├── page.tsx              # オペレーター一覧
+│   │   ├── [id]/
+│   │   │   └── page.tsx          # オペレーター詳細・編集
+│   │   └── create/
+│   │       └── page.tsx          # 新規オペレーター登録
 │   ├── users/
-│   │   └── page.tsx
+│   │   └── page.tsx              # 全ユーザー管理
 │   └── properties/
-│       └── page.tsx
+│       └── page.tsx              # 全オペレーターの物件閲覧
 │
 └── api/                          # API Routes
     ├── chat/
@@ -505,11 +511,18 @@ app/
     │   ├── route.ts            # POST (create), GET (list)
     │   └── [id]/
     │       └── route.ts        # PATCH (update/cancel)
-    └── emails/                  # ⭐ NEW
-        ├── send/
-        │   └── route.ts        # POST (send email)
-        └── logs/
-            └── route.ts        # GET (email logs - admin only)
+    ├── emails/                  # ⭐ NEW
+    │   ├── send/
+    │   │   └── route.ts        # POST (send email)
+    │   └── logs/
+    │       └── route.ts        # GET (email logs - admin only)
+    └── admin/                   # ⭐ NEW 管理者専用API
+        ├── operators/
+        │   ├── route.ts        # GET (list), POST (create)
+        │   └── [id]/
+        │       └── route.ts    # GET (detail), PATCH (update), DELETE
+        └── stats/
+            └── route.ts        # GET (システム全体の統計)
 ```
 
 ---
@@ -616,35 +629,55 @@ export const useProperties = (filters: PropertyFilters) => {
 
 ### Row Level Security（RLS）
 
-```sql
--- properties テーブル
+マルチテナント構造による厳格なデータ分離
 
--- 顧客：公開物件のみ閲覧可能
-CREATE POLICY "customer_view_public"
+```sql
+-- operators テーブル
+-- オペレーター：自社情報のみ閲覧・更新
+-- 管理者：全オペレーター情報を管理
+
+-- properties テーブル
+-- 顧客：自分が所属するオペレーターの公開物件のみ閲覧
+CREATE POLICY "customer_view_own_operator_properties"
 ON properties FOR SELECT
 TO authenticated
 USING (
   is_public = true
+  AND operator_id IN (
+    SELECT operator_id FROM customers WHERE user_id = auth.uid()
+  )
   AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'customer'
 );
 
--- オペレーター：自分が取り込んだ物件の更新
-CREATE POLICY "operator_update_own"
-ON properties FOR UPDATE
+-- オペレーター：自社の物件のみ管理
+CREATE POLICY "operator_manage_own_properties"
+ON properties FOR ALL
 TO authenticated
 USING (
-  created_by = auth.uid()
+  operator_id IN (
+    SELECT id FROM operators WHERE user_id = auth.uid()
+  )
   AND (SELECT role FROM auth.users WHERE id = auth.uid()) = 'operator'
 );
 
--- 管理者：すべての操作が可能
+-- 管理者：すべての物件を閲覧・管理
 CREATE POLICY "admin_all"
 ON properties FOR ALL
 TO authenticated
 USING (
   (SELECT role FROM auth.users WHERE id = auth.uid()) = 'admin'
 );
+
+-- customers テーブル
+-- オペレーター：自社の顧客のみ管理
+-- 管理者：全顧客を閲覧（監査用）
+
+-- conversations / messages テーブル
+-- オペレーター：自社の顧客の会話のみ閲覧
+-- 管理者：全会話を閲覧（監査用）
 ```
+
+詳細は [データベース設計](./database-design.md#row-level-security-rls設定) を参照
 
 ---
 
